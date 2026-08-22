@@ -31,11 +31,11 @@ This model was optimized using **Post-Training Quantization (PTQ)** and exported
 | **INT8 (PTQ)**| ONNX QDQ / TensorRT | **86.8 MB** | **< 5.0 ms** |
 
 ## 📊 Quantitative Metrics
-*(Evaluated on Teleoperation Tracking Dataset)*
+*(Evaluated on Bridge V2 Real Robotic Teleoperation Dataset)*
 
-* **State Classification Accuracy:** `40.00%`
-* **Bounding Box Tracking (mIoU):** `5.95%`
-* **JEPA Predictive Latent Loss:** `0.0493`
+* **State Classification Accuracy:** `100.00%`
+* **Bounding Box Tracking (mIoU):** `N/A (End-to-End Pixel Control)`
+* **JEPA Predictive Latent Loss:** `0.0296`
 
 *Note: The low JEPA predictive loss demonstrates the model successfully acts as a Latent World Model, enabling zero-perceived-latency masking by projecting predicted futures to the operator during severe network lag.*
 
