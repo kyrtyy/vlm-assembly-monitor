@@ -63,3 +63,5 @@ sample_clip.png
 tracking_result.png
 attention_maps.png
 benchmark_results.json
+*.mp4
+*.mp4
