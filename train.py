@@ -535,6 +535,11 @@ def train(args):
         import wandb
         wandb.finish()
 
+    # Synchronize all processes before destroying the process group so that
+    # rank 1 doesn't exit while rank 0 is still uploading artifacts to WandB.
+    if distributed:
+        dist.barrier()
+
     cleanup_distributed()
 
 
