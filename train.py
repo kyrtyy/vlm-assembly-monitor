@@ -38,7 +38,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 from models.vlm import VLMAssemblyMonitor
 from utils.losses import AssemblyLoss
-from data.bridge_v2 import BridgeV2TeleopDataset, collate_fn
+from data.synthetic import collate_fn
 
 
 # ── Distributed helpers ──────────────────────────────────────────────────────
