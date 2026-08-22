@@ -19,6 +19,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to best.pth")
     parser.add_argument("--T", type=int, default=8, help="Sequence length")
+    parser.add_argument("--bridge", action="store_true", help="Evaluate on Bridge V2 real teleop data")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -29,19 +30,32 @@ def main():
     model.load_state_dict(ckpt["model"] if "model" in ckpt else ckpt)
     model.eval()
 
-    print("Generating validation dataset (100 clips)...")
-    dataset = SyntheticAssemblyDataset(num_clips=100, T=args.T)
-    loader = DataLoader(dataset, batch_size=8, shuffle=False)
+    print("Generating validation dataset...")
+    if args.bridge:
+        from data.bridge_v2 import BridgeV2TeleopDataset
+        from data.synthetic import collate_fn
+        dataset = BridgeV2TeleopDataset(T=args.T, split="val")
+        # Since it's an iterable dataset with an infinite loop in the fallback, we'll manually break after 50 batches
+        loader = DataLoader(dataset, batch_size=8, shuffle=False, collate_fn=collate_fn)
+    else:
+        dataset = SyntheticAssemblyDataset(num_clips=100, T=args.T)
+        loader = DataLoader(dataset, batch_size=8, shuffle=False)
 
     correct_states = 0
     total_states = 0
     total_iou = 0.0
     total_boxes = 0
     jepa_losses = []
+    
+    num_eval_batches = 50
+    batches_processed = 0
 
     print("Evaluating metrics...")
     with torch.no_grad():
-        for batch in tqdm(loader):
+        for batch in tqdm(loader, total=num_eval_batches if args.bridge else len(loader)):
+            if args.bridge and batches_processed >= num_eval_batches:
+                break
+            batches_processed += 1
             clip = batch["clip"].to(device)
             labels = batch["state_label"].to(device)
             gt_boxes = batch["boxes"].to(device)
@@ -85,12 +99,14 @@ def main():
     acc = (correct_states / total_states) * 100
     mean_iou = (total_iou / total_boxes) * 100 if total_boxes > 0 else 0
     mean_jepa = np.mean(jepa_losses) if jepa_losses else 0
+    
+    iou_str = "N/A (Not labeled in Bridge)" if args.bridge else f"{mean_iou:.2f} %"
 
     print("\n" + "="*50)
     print(" 🚀 VLM TELEOPERATION MONITOR - QUANTITATIVE METRICS")
     print("="*50)
     print(f" State Classification Accuracy : {acc:.2f} %")
-    print(f" Bounding Box Tracking (mIoU)  : {mean_iou:.2f} %")
+    print(f" Bounding Box Tracking (mIoU)  : {iou_str}")
     print(f" JEPA Predictive Latent Loss   : {mean_jepa:.4f} (Smooth L1)")
     print("="*50)
     print("\nPaste these numbers back to me, and I will finalize your README!")
