@@ -25,17 +25,22 @@
 - **Current Objective:** Transition the development workspace to `/Users/macbook/.gemini/antigravity/scratch/vlm_assembly`, verify code layout, configure environment context, and prepare the training script (`train.py`) for multi-GPU training (DDP / `torchrun`), implementing mixed-precision and compile optimizations.
 
 ## Recent Changes & Decisions
-- **Workspace Shift:** Shifted work from fluid super-resolution to the `vlm_assembly` project per user directive.
-- **Implementation Plan Approved:** The implementation plan for refactoring `train.py` to support PyTorch DDP / `torchrun`, mixed-precision, and model compilation was reviewed and approved.
-- **Codebase Review and Analysis:** Conducted a thorough codebase review ([codebase_review.md](file:///Users/macbook/.gemini/antigravity/brain/d758ea84-afc3-45eb-adf5-22f2d405ad33/codebase_review.md)), identifying key bugs in `export_onnx.py` (NameError, output names mismatch, lack of actual FP16 conversion) and an optimization target in `models/vlm.py` (sequential loop over frames in cross-modal fusion).
-- **Task List Initialized:** Created [task.md](file:///Users/macbook/.gemini/antigravity/brain/d758ea84-afc3-45eb-adf5-22f2d405ad33/task.md) to manage execution.
+- **DDP Refactor Complete:** `train.py` fully refactored for multi-GPU DDP via `torchrun` with NCCL backend, `DistributedSampler`, rank-gated I/O, and synchronized early stopping.
+- **Modern Mixed-Precision:** Replaced deprecated `torch.cuda.amp` with `torch.amp`. bf16 is default for RTX 4090 (Ada Lovelace); fp16 fallback with `GradScaler`.
+- **torch.compile:** Added `--compile` flag for kernel optimization (`reduce-overhead` mode).
+- **Enhanced WandB:** `wandb.watch()` for gradient/parameter logging, per-step loss metrics, model artifact checkpointing on best val loss.
+- **Parallelized Fusion:** Eliminated sequential Python loop in `models/vlm.py` — cross-modal fusion now runs in a single batched forward pass across all T frames.
+- **ONNX Export Fixes:** Fixed NameError (`QuantFormat`), output names mismatch, and added actual FP16 conversion via `onnxconverter-common`.
+- **Git Repository Initialized:** Local repo on `main` branch, ready for remote push.
 
 ## Known Blockers & Errors
-- **SSH Credentials Pending:** Waiting for the user to provide remote node SSH details to connect, inspect the environment, and run validation.
+- **SSH Credentials Pending:** Waiting for user to provide remote cluster SSH details to set up the push-to-deploy workflow and verify environment.
 
 ## Next Actions
-- [ ] Implement the parallelized cross-modal fusion optimization in `models/vlm.py`.
-- [ ] Fix the ONNX export bugs (NameError, output names mismatch, actual FP16 conversion) in `export_onnx.py`.
-- [ ] Refactor `train.py` to support PyTorch DDP (`torchrun`), mixed-precision (`bf16`), and `torch.compile()`.
-- [ ] Connect to the remote node via SSH (once credentials provided) to verify CUDA, PyTorch, Conda environment, and path.
-- [ ] Verify refactored DDP training script on remote node.
+- [ ] Obtain SSH details and set up bare repo + post-receive hook for push-to-deploy.
+- [ ] `git push cluster main` to deploy code to the cluster.
+- [ ] Create conda env on cluster, install dependencies, `wandb login`.
+- [ ] Verify GPU setup (CUDA, 2x RTX 4090, bf16 support).
+- [ ] Run single-GPU validation, then multi-GPU `torchrun` training.
+- [ ] Push to GitHub for portfolio.
+
