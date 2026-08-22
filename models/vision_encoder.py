@@ -50,8 +50,8 @@ class VisionEncoder(nn.Module):
             for p in self.backbone.parameters():
                 p.requires_grad_(False)
 
-        # Channel count at stage 4 of EfficientNet-B0
-        backbone_channels = 1280
+        # Channel count at stage 4 of EfficientNet-B0 (timm features_only strips the 1280 conv_head)
+        backbone_channels = 320
 
         # Project backbone channels → d_model
         # 1x1 conv acts as a per-patch linear projection (identical to ViT patch embed)
