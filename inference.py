@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument("--synthetic", action="store_true", help="Use synthetic moving-box video")
     parser.add_argument("--instruction", type=str, default="Assemble the wooden table", help="Language instruction")
     parser.add_argument("--output", type=str, default="output_demo.mp4", help="Output video path")
-    parser.add_argument("--T", type=int, default=32, help="Sequence length")
+    parser.add_argument("--T", type=int, default=8, help="Sequence length")
     parser.add_argument("--img_size", type=int, default=224, help="Frame resolution")
     return parser.parse_args()
 
