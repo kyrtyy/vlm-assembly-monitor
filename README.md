@@ -33,9 +33,9 @@ This model was optimized using **Post-Training Quantization (PTQ)** and exported
 ## 📊 Quantitative Metrics
 *(Evaluated on Teleoperation Tracking Dataset)*
 
-* **State Classification Accuracy:** `[INSERT_ACCURACY_HERE]%`
-* **Bounding Box Tracking (mIoU):** `[INSERT_MIOU_HERE]%`
-* **JEPA Predictive Latent Loss:** `[INSERT_JEPA_HERE]`
+* **State Classification Accuracy:** `40.00%`
+* **Bounding Box Tracking (mIoU):** `5.95%`
+* **JEPA Predictive Latent Loss:** `0.0493`
 
 *Note: The low JEPA predictive loss demonstrates the model successfully acts as a Latent World Model, enabling zero-perceived-latency masking by projecting predicted futures to the operator during severe network lag.*
 
