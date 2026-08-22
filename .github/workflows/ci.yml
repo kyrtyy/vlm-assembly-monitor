@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install transformers timm einops numpy
+
+      - name: Check syntax (py compile)
+        run: |
+          python -m py_compile models/vision_encoder.py
+          python -m py_compile models/language_encoder.py
+          python -m py_compile models/fusion.py
+          python -m py_compile models/temporal.py
+          python -m py_compile models/heads.py
+          python -m py_compile models/vlm.py
+          python -m py_compile utils/kalman_filter.py
+          python -m py_compile utils/losses.py
+          python -m py_compile data/synthetic.py
+          python -m py_compile train.py
+          python -m py_compile export_onnx.py
+          echo "All files pass syntax check"
+
+      - name: Validate Kalman filter (CPU, no GPU required)
+        run: |
+          python - <<'EOF'
+          import sys
+          sys.path.insert(0, '.')
+          import numpy as np
+          from utils.kalman_filter import BBoxKalmanFilter
+
+          tracker = BBoxKalmanFilter()
+
+          # Feed 10 frames of detections and verify output format
+          for i in range(10):
+              detections = np.array([
+                  [0.5 + i*0.01, 0.5, 0.1, 0.1, 0.9],
+                  [0.3, 0.4 + i*0.01, 0.08, 0.12, 0.8],
+              ])
+              results = tracker.update(detections, objectness_threshold=0.5)
+
+          assert len(results) > 0, "Tracker returned no results"
+          assert all('track_id' in r and 'box' in r for r in results), "Missing keys"
+          assert all(r['box'].shape == (4,) for r in results), "Wrong box shape"
+          print(f"Kalman filter OK — {len(results)} confirmed tracks after 10 frames")
+          EOF
+
+      - name: Validate synthetic dataset (no GPU)
+        run: |
+          python - <<'EOF'
+          import sys
+          sys.path.insert(0, '.')
+          from data.synthetic import SyntheticAssemblyDataset, collate_fn
+          from torch.utils.data import DataLoader
+
+          ds = SyntheticAssemblyDataset(num_clips=10, T=4, img_size=(64, 64))
+          assert len(ds) == 10
+
+          loader = DataLoader(ds, batch_size=2, collate_fn=collate_fn)
+          batch = next(iter(loader))
+
+          assert batch['clip'].shape    == (2, 4, 3, 64, 64)
+          assert batch['boxes'].shape   == (2, 4, 4, 4)
+          assert batch['box_mask'].shape == (2, 4, 4)
+          assert len(batch['instruction']) == 2
+          print("Synthetic dataset OK — shapes verified")
+          EOF

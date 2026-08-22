@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Model weights & checkpoints
+checkpoints/
+*.pth
+*.pt
+*.ckpt
+exported_models/
+*.onnx
+*.trt
+*.engine
+
+# Data
+ikea_asm/
+ikea_asm_dataset_public/
+*.zip
+*.tar.gz
+*.h5
+data/raw/
+data/processed/
+
+# Experiment tracking
+wandb/
+mlruns/
+lightning_logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Torch compile cache
+__torch_compile_cache/
+torch_compile_debug/
+
+# Misc outputs
+*.png
+*.jpg
+sample_clip.png
+tracking_result.png
+attention_maps.png
+benchmark_results.json
