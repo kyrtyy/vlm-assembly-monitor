@@ -217,7 +217,17 @@ def benchmark_onnx_fp16(onnx_path: Path, args) -> dict:
     sess_opts = ort.SessionOptions()
     sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
-    sess = ort.InferenceSession(str(onnx_path), sess_opts, providers=providers)
+    try:
+        sess = ort.InferenceSession(str(onnx_path), sess_opts, providers=providers)
+    except Exception as e:
+        print(f"  [Warning] ONNX Runtime failed to load FP16 model (often due to missing onnxruntime-gpu or CPU not supporting FP16 LayerNorm): {e}")
+        return {
+            "precision": "FP16",
+            "framework": "ONNX Runtime",
+            "memory_mb": round(onnx_path.stat().st_size / 1024**2, 1),
+            "latency_ms": "N/A (CPU)",
+            "latency_p95_ms": "N/A (CPU)",
+        }
 
     # Prepare numpy inputs
     clip_np     = np.random.randn(args.batch_size, args.T, 3, args.img_size, args.img_size).astype(np.float16)
