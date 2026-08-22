@@ -179,27 +179,30 @@ def build_dataloaders(args) -> tuple[DataLoader, DataLoader]:
     # For IterableDatasets, we cannot shuffle the DataLoader
     is_iterable = args.bridge
 
+    num_workers = 0 if is_iterable else 4
+    persistent_workers = False if is_iterable else True
+
     train_loader = DataLoader(
         train_ds,
         batch_size=args.batch_size,
         shuffle=False if is_iterable else (train_sampler is None),
         sampler=train_sampler,
-        num_workers=4,
+        num_workers=num_workers,
         pin_memory=True,
         collate_fn=collate_fn,
         drop_last=True,
-        persistent_workers=True,
+        persistent_workers=persistent_workers,
     )
     val_loader = DataLoader(
         val_ds,
         batch_size=args.batch_size,
         shuffle=False,
         sampler=val_sampler,
-        num_workers=4,
+        num_workers=num_workers,
         pin_memory=True,
         collate_fn=collate_fn,
         drop_last=False,
-        persistent_workers=True,
+        persistent_workers=persistent_workers,
     )
     return train_loader, val_loader, train_sampler
 

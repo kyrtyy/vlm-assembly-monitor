@@ -21,9 +21,13 @@ class BridgeV2TeleopDataset(IterableDataset):
         self.max_objects = max_objects
         
         # Load the dataset in streaming mode so it doesn't fill your hard drive
-        # Note: Replace 'jxu124/OpenX-Embodiment' with the exact HF repo you prefer for BridgeV2
         print(f"Initializing BridgeV2 Dataset (Streaming {split} split)...")
-        self.dataset = load_dataset("jxu124/OpenX-Embodiment", "bridge", split=split, streaming=True)
+        try:
+            self.dataset = load_dataset("jxu124/OpenX-Embodiment", "bridge", split=split, streaming=True, trust_remote_code=True)
+        except ValueError:
+            # If the val split doesn't exist in this specific repo, fallback to train
+            print(f"Split '{split}' not found, falling back to 'train'...")
+            self.dataset = load_dataset("jxu124/OpenX-Embodiment", "bridge", split="train", streaming=True, trust_remote_code=True)
         
         self.transform = transforms.Compose([
             transforms.Resize(self.img_size),
