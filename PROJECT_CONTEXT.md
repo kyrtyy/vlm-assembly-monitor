@@ -31,6 +31,7 @@
 - **Enhanced WandB:** `wandb.watch()` for gradient/parameter logging, per-step loss metrics, model artifact checkpointing on best val loss.
 - **Parallelized Fusion:** Eliminated sequential Python loop in `models/vlm.py` — cross-modal fusion now runs in a single batched forward pass across all T frames.
 - **ONNX Export Fixes:** Fixed NameError (`QuantFormat`), output names mismatch, and added actual FP16 conversion via `onnxconverter-common`.
+- **Transforms Collision Bugfix:** Resolved variable shadowing in `data/synthetic.py` where argument `T` shadowed `torchvision.transforms as T`.
 - **Git Repository Initialized:** Local repo on `main` branch, ready for remote push.
 
 ## Known Blockers & Errors
