@@ -119,8 +119,11 @@ class VLMAssemblyMonitor(nn.Module):
         B, T, N, D = visual_tokens_seq.shape
         L = lang_tokens.shape[1]
         vis_flat = visual_tokens_seq.view(B * T, N, D)
-        lang_flat = lang_tokens.repeat_interleave(T, dim=0)       # (B*T, L, d_model)
-        lang_mask_flat = lang_mask.repeat_interleave(T, dim=0)   # (B*T, L)
+        # Use expand + reshape instead of repeat_interleave for ONNX tracing compatibility.
+        # JIT tracing converts shape 'T' into a CPU scalar tensor, which causes device
+        # mismatches in repeat_interleave on CUDA tensors.
+        lang_flat = lang_tokens.unsqueeze(1).expand(B, T, L, -1).reshape(B * T, L, -1)
+        lang_mask_flat = lang_mask.unsqueeze(1).expand(B, T, L).reshape(B * T, L)
 
         fused_flat, attn_w_flat = self.fusion(
             visual_tokens=vis_flat,
