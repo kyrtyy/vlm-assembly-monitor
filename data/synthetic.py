@@ -20,7 +20,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from PIL import Image, ImageDraw, ImageFont
-import torchvision.transforms as T
+import torchvision.transforms as transforms
 
 
 # Assembly state taxonomy (matches StateClassifier num_states=6)
@@ -84,10 +84,10 @@ class SyntheticAssemblyDataset(Dataset):
         self.max_length = max_length
 
         # ImageNet normalisation (required by EfficientNet pretrained weights)
-        self.frame_transform = T.Compose([
-            T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406],
-                        std=[0.229, 0.224, 0.225]),
+        self.frame_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225]),
         ])
 
         # Pre-generate clip metadata (state + instruction per clip for reproducibility)

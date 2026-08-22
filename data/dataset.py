@@ -36,9 +36,6 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from PIL import Image
-import torchvision.transforms as T
-import torchvision.transforms.functional as TF
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 

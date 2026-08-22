@@ -34,13 +34,11 @@
 - **Git Repository Initialized:** Local repo on `main` branch, ready for remote push.
 
 ## Known Blockers & Errors
-- **SSH Credentials Pending:** Waiting for user to provide remote cluster SSH details to set up the push-to-deploy workflow and verify environment.
+- None. User is executing the deployment and cluster configuration steps manually.
 
 ## Next Actions
-- [ ] Obtain SSH details and set up bare repo + post-receive hook for push-to-deploy.
-- [ ] `git push cluster main` to deploy code to the cluster.
-- [ ] Create conda env on cluster, install dependencies, `wandb login`.
-- [ ] Verify GPU setup (CUDA, 2x RTX 4090, bf16 support).
-- [ ] Run single-GPU validation, then multi-GPU `torchrun` training.
-- [ ] Push to GitHub for portfolio.
+- [ ] User runs the provided setup commands on the cluster to configure the bare Git repository and `post-receive` hook.
+- [ ] User pushes the local `main` branch to the cluster.
+- [ ] User configures the Conda environment and initiates the `torchrun` multi-GPU training process.
+- [ ] Await user feedback on training results or potential CUDA/environmental issues.
 
