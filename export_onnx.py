@@ -145,60 +145,57 @@ def benchmark_pytorch(model, args, device) -> dict:
 # ONNX FP16 Export & Benchmark
 # ──────────────────────────────────────────────────────────────────────────────
 
-def export_onnx_fp16(model, args, output_dir: Path) -> Path:
-    """Export model to ONNX with FP16 precision."""
-    print("\n[2/3] Exporting to ONNX FP16...")
+def export_onnx_fp32(model, args, output_dir: Path) -> Path:
+    print("\n[2/3] Exporting to ONNX FP32...")
     try:
         import onnx
         import onnxsim
     except ImportError:
-        print("  onnx / onnxsim not installed. Run: pip install onnx onnxsim")
+        print("  onnx / onnxsim not installed.")
         return None
 
     device = next(model.parameters()).device
     clip, input_ids, attn_mask = get_dummy_inputs(args, device)
-
-    onnx_path = output_dir / "vlm_assembly_fp16.onnx"
+    onnx_path = output_dir / "vlm_assembly_fp32.onnx"
 
     torch.onnx.export(
-        model,
-        (clip, input_ids, attn_mask),
-        str(onnx_path),
+        model, (clip, input_ids, attn_mask), str(onnx_path),
         opset_version=17,
         input_names=["clip", "input_ids", "attention_mask"],
         output_names=["state_logits", "boxes", "objectness", "attn_weights"],
         dynamic_axes={
-            "clip":             {0: "batch"},
-            "input_ids":        {0: "batch"},
-            "attention_mask":   {0: "batch"},
-            "state_logits":     {0: "batch"},
-            "boxes":            {0: "batch"},
-            "objectness":       {0: "batch"},
-            "attn_weights":     {0: "batch"},
+            "clip": {0: "batch"}, "input_ids": {0: "batch"}, "attention_mask": {0: "batch"},
+            "state_logits": {0: "batch"}, "boxes": {0: "batch"}, "objectness": {0: "batch"}, "attn_weights": {0: "batch"}
         },
         do_constant_folding=True,
     )
-    print(f"  Raw ONNX saved: {onnx_path}")
-
-    # Simplify graph (fold constants, eliminate dead nodes)
+    
+    # Simplify graph
     model_onnx = onnx.load(str(onnx_path))
     simplified, ok = onnxsim.simplify(model_onnx)
     if ok:
-        model_onnx = simplified
-        print("  Graph simplified successfully.")
-    else:
-        print("  Simplification skipped (model too complex for onnxsim).")
+        onnx.save(simplified, str(onnx_path))
+    return onnx_path
 
-    # Convert model to actual FP16
-    try:
-        from onnxconverter_common import float16
-        model_onnx = float16.convert_float_to_float16(model_onnx)
-        print("  ONNX model successfully converted to FP16 precision.")
-    except ImportError:
-        print("  onnxconverter_common not installed. Skipping FP16 conversion. Run: pip install onnxconverter-common")
-
-    onnx.save(model_onnx, str(onnx_path))
-    print(f"  ONNX model size: {onnx_path.stat().st_size / 1024**2:.1f} MB")
+def export_onnx_fp16_native(model, args, output_dir: Path) -> Path:
+    print("\n[3/3] Exporting to native ONNX FP16 (via PyTorch)...")
+    device = next(model.parameters()).device
+    model = model.half()
+    clip, input_ids, attn_mask = get_dummy_inputs(args, device)
+    clip = clip.half()
+    
+    onnx_path = output_dir / "vlm_assembly_fp16.onnx"
+    torch.onnx.export(
+        model, (clip, input_ids, attn_mask), str(onnx_path),
+        opset_version=17,
+        input_names=["clip", "input_ids", "attention_mask"],
+        output_names=["state_logits", "boxes", "objectness", "attn_weights"],
+        dynamic_axes={
+            "clip": {0: "batch"}, "input_ids": {0: "batch"}, "attention_mask": {0: "batch"},
+            "state_logits": {0: "batch"}, "boxes": {0: "batch"}, "objectness": {0: "batch"}, "attn_weights": {0: "batch"}
+        },
+        do_constant_folding=True,
+    )
     return onnx_path
 
 
@@ -223,7 +220,7 @@ def benchmark_onnx_fp16(onnx_path: Path, args) -> dict:
     sess = ort.InferenceSession(str(onnx_path), sess_opts, providers=providers)
 
     # Prepare numpy inputs
-    clip_np     = np.random.randn(args.batch_size, args.T, 3, args.img_size, args.img_size).astype(np.float32)
+    clip_np     = np.random.randn(args.batch_size, args.T, 3, args.img_size, args.img_size).astype(np.float16)
     ids_np      = np.random.randint(0, 30522, (args.batch_size, 64)).astype(np.int64)
     mask_np     = np.ones((args.batch_size, 64), dtype=np.int64)
 
@@ -378,12 +375,14 @@ def main():
     fp32_result  = benchmark_pytorch(model, args, device)
     results.append(fp32_result)
 
-    onnx_path    = export_onnx_fp16(model, args, output_dir)
-    fp16_result  = benchmark_onnx_fp16(onnx_path, args)
-    results.append(fp16_result)
-
-    int8_result  = export_and_benchmark_int8(onnx_path, args)
+    onnx_fp32_path = export_onnx_fp32(model, args, output_dir)
+    
+    int8_result  = export_and_benchmark_int8(onnx_fp32_path, args)
     results.append(int8_result)
+
+    onnx_fp16_path = export_onnx_fp16_native(model, args, output_dir)
+    fp16_result  = benchmark_onnx_fp16(onnx_fp16_path, args)
+    results.append(fp16_result)
 
     print_benchmark_table(results)
 
