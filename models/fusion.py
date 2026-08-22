@@ -129,7 +129,7 @@ class CrossModalFusion(nn.Module):
         Returns:
             pooled: (B, d_model)
         """
-        # Valid token mask: (B, L, 1), float
-        valid = (~padding_mask).unsqueeze(-1).float()         # (B, L, 1)
-        pooled = (fused * valid).sum(dim=1) / valid.sum(dim=1).clamp(min=1e-9)
+        # Valid token mask: (B, L, 1), match fused dtype
+        valid = (~padding_mask).unsqueeze(-1).to(fused.dtype)         # (B, L, 1)
+        pooled = (fused * valid).sum(dim=1) / valid.sum(dim=1).clamp(min=1e-4)
         return pooled  # (B, d_model)
