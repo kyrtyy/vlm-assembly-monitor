@@ -330,19 +330,22 @@ def train(args):
         for k, v in param_counts.items():
             print(f"  {k:25s}: {v:>10,}")
 
-    # ── torch.compile (optional) ──────────────────────────────────────────
-    if args.compile:
-        if is_main_process():
-            print("Compiling model with torch.compile()...")
-        model = torch.compile(model, mode="reduce-overhead")
-
     # ── Wrap in DDP ───────────────────────────────────────────────────────
+    # DDP must wrap BEFORE torch.compile — compile traces through DDP's
+    # forward(), enabling correct gradient bucketing and allreduce fusion.
     if distributed:
         model = DDP(model, device_ids=[local_rank], output_device=local_rank,
                     find_unused_parameters=False)
 
     # Access raw model for encode_instruction (DDP wraps the module)
+    # For compiled models, .module still works since compile is transparent.
     raw_model = model.module if isinstance(model, DDP) else model
+
+    # ── torch.compile (optional, applied after DDP) ───────────────────────
+    if args.compile:
+        if is_main_process():
+            print("Compiling model with torch.compile()...")
+        model = torch.compile(model, mode="reduce-overhead")
 
     # ── WandB gradient/parameter logging ──────────────────────────────────
     if not args.no_wandb:
