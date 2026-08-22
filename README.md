@@ -152,17 +152,26 @@ pass so that model weights adapt to the lower precision before deployment.
 1. Open `notebooks/VLM_Colab.ipynb` in Google Colab (GPU runtime required)
 2. The notebook runs the full pipeline: data generation → training → export → benchmark
 
-### Local setup
+### Local setup & Multi-GPU Training
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/vlm-assembly-monitor
 cd vlm-assembly-monitor
 pip install -r requirements.txt
 
-# Train on synthetic data (no dataset download required)
+# Train on synthetic data (single GPU)
 python train.py --synthetic --epochs 30 --batch_size 4 --T 8
 
-# Export to ONNX and benchmark
+# Train on multi-GPU using Distributed Data Parallel (DDP) and bfloat16
+torchrun --nproc_per_node=2 train.py \
+    --synthetic \
+    --epochs 30 \
+    --batch_size 8 \
+    --grad_accum 2 \
+    --precision bf16 \
+    --compile
+
+# Export to ONNX and profile Edge deployment metrics (Latency/Memory)
 python export_onnx.py --checkpoint ./checkpoints/best.pth --synthetic
 ```
 
