@@ -192,7 +192,7 @@ def export_onnx_fp16(model, args, output_dir: Path) -> Path:
     # Convert model to actual FP16
     try:
         from onnxconverter_common import float16
-        model_onnx = float16.convert_float16(model_onnx)
+        model_onnx = float16.convert_float_to_float16(model_onnx)
         print("  ONNX model successfully converted to FP16 precision.")
     except ImportError:
         print("  onnxconverter_common not installed. Skipping FP16 conversion. Run: pip install onnxconverter-common")
