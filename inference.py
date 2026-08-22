@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to best.pth")
     parser.add_argument("--video", type=str, default=None, help="Path to input MP4")
     parser.add_argument("--synthetic", action="store_true", help="Use synthetic moving-box video")
-    parser.add_argument("--instruction", type=str, default="Assemble the wooden table", help="Language instruction")
+    parser.add_argument("--instruction", type=str, default="Pick up the red block and place it in the blue bowl", help="Language instruction")
     parser.add_argument("--output", type=str, default="output_demo.mp4", help="Output video path")
     parser.add_argument("--T", type=int, default=8, help="Sequence length")
     parser.add_argument("--img_size", type=int, default=224, help="Frame resolution")

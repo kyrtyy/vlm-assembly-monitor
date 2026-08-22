@@ -100,18 +100,29 @@ class AssemblyLoss(nn.Module):
             reduction="mean",
         )
 
-        # ── 4. Combine ────────────────────────────────────────────────────
+        # ── 4. JEPA Predictive Loss (Teleoperation) ───────────────────────
+        l_jepa = 0.0
+        if "jepa_pred" in predictions and "jepa_target" in predictions:
+            j_pred = predictions["jepa_pred"][:, :-1]   # (B, T-1, d)
+            j_tgt  = predictions["jepa_target"][:, 1:]  # (B, T-1, d)
+            l_jepa = F.smooth_l1_loss(j_pred, j_tgt)
+
+        # ── 5. Combine ────────────────────────────────────────────────────
         total = (
             self.lambda_cls * l_cls
             + self.lambda_box * l_box
             + self.lambda_obj * l_obj
             + self.lambda_l1  * l_l1
+            + l_jepa
         )
 
-        return {
+        ret = {
             "total": total,
             "cls":   l_cls,
             "box":   l_box,
             "obj":   l_obj,
             "l1":    l_l1,
         }
+        if "jepa_pred" in predictions:
+            ret["jepa"] = l_jepa
+        return ret

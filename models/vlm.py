@@ -53,6 +53,7 @@ class VLMAssemblyMonitor(nn.Module):
         T_max: int = 32,
         freeze_vision_backbone: bool = True,
         freeze_bert: bool = True,
+        use_jepa: bool = True,
     ):
         super().__init__()
 
@@ -92,6 +93,32 @@ class VLMAssemblyMonitor(nn.Module):
             max_objects=max_objects,
         )
 
+        # ── JEPA (Predictive Teleop Masking) ──────────────────────────────
+        self.use_jepa = use_jepa
+        self.ema_tau = 0.99
+        if self.use_jepa:
+            import copy
+            self.target_vision_enc = copy.deepcopy(self.vision_enc)
+            self.target_fusion = copy.deepcopy(self.fusion)
+            for p in self.target_vision_enc.parameters(): p.requires_grad = False
+            for p in self.target_fusion.parameters(): p.requires_grad = False
+            
+            # Predicts future latent z_{t+k} given current temporal context
+            self.jepa_predictor = nn.Sequential(
+                nn.Linear(d_model, d_model * 2),
+                nn.GELU(),
+                nn.Linear(d_model * 2, d_model)
+            )
+
+    @torch.no_grad()
+    def update_ema(self):
+        """EMA update for the target encoders (Call after optimizer.step())"""
+        if not self.use_jepa: return
+        for ctx_p, tgt_p in zip(self.vision_enc.parameters(), self.target_vision_enc.parameters()):
+            tgt_p.data.mul_(self.ema_tau).add_(ctx_p.data, alpha=1.0 - self.ema_tau)
+        for ctx_p, tgt_p in zip(self.fusion.parameters(), self.target_fusion.parameters()):
+            tgt_p.data.mul_(self.ema_tau).add_(ctx_p.data, alpha=1.0 - self.ema_tau)
+
     def forward(
         self,
         clip: torch.Tensor,            # (B, T, 3, H, W)
@@ -106,6 +133,8 @@ class VLMAssemblyMonitor(nn.Module):
             'boxes'         : (B, T, max_objects, 4) — normalised (cx,cy,w,h)
             'objectness'    : (B, T, max_objects)    — objectness logits
             'attn_weights'  : (B, nhead, L, N)       — cross-attention maps (last frame)
+            'jepa_pred'     : (B, T, d_model)        — predicted future latents (if training)
+            'jepa_target'   : (B, T, d_model)        — target EMA latents (if training)
         """
         B, T = clip.shape[:2]
 
@@ -120,8 +149,6 @@ class VLMAssemblyMonitor(nn.Module):
         L = lang_tokens.shape[1]
         vis_flat = visual_tokens_seq.view(B * T, N, D)
         # Use expand + reshape instead of repeat_interleave for ONNX tracing compatibility.
-        # JIT tracing converts shape 'T' into a CPU scalar tensor, which causes device
-        # mismatches in repeat_interleave on CUDA tensors.
         lang_flat = lang_tokens.unsqueeze(1).expand(B, T, L, -1).reshape(B * T, L, -1)
         lang_mask_flat = lang_mask.unsqueeze(1).expand(B, T, L).reshape(B * T, L)
 
@@ -148,13 +175,35 @@ class VLMAssemblyMonitor(nn.Module):
 
         # 6. Per-frame bounding boxes
         boxes, objectness = self.bbox_head(temporal_out)   # (B,T,K,4), (B,T,K)
-
-        return {
+        
+        ret = {
             "state_logits": state_logits,
             "boxes": boxes,
             "objectness": objectness,
             "attn_weights": attn_weights_last,
         }
+
+        # 7. JEPA Forward (Training only)
+        if self.use_jepa and self.training:
+            with torch.no_grad():
+                # Target Latent via EMA encoders
+                tgt_vis = self.target_vision_enc(clip)
+                tgt_vis_flat = tgt_vis.view(B * T, N, D)
+                tgt_fused_flat, _ = self.target_fusion(
+                    visual_tokens=tgt_vis_flat,
+                    lang_tokens=lang_flat,
+                    lang_padding_mask=lang_mask_flat
+                )
+                tgt_pooled_flat = CrossModalFusion.mean_pool(tgt_fused_flat, lang_mask_flat)
+                jepa_target = tgt_pooled_flat.view(B, T, D)
+            
+            # Predict future latent
+            jepa_pred = self.jepa_predictor(temporal_out)
+            
+            ret["jepa_pred"] = jepa_pred
+            ret["jepa_target"] = jepa_target
+
+        return ret
 
     def encode_instruction(
         self, instructions: list[str], device: torch.device

@@ -448,20 +448,28 @@ def train(args):
                     optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
+                
+                # Update JEPA EMA Target Encoders
+                if hasattr(raw_model, "update_ema"):
+                    raw_model.update_ema()
+                    
                 global_step += 1
 
                 # ── Per-step WandB logging ────────────────────────────────
                 if not args.no_wandb and global_step % 10 == 0:
                     import wandb
-                    wandb.log({
+                    log_dict = {
                         "step/total_loss": loss_dict["total"].item(),
                         "step/cls_loss": loss_dict["cls"].item(),
                         "step/box_loss": loss_dict["box"].item(),
                         "step/obj_loss": loss_dict["obj"].item(),
                         "step/l1_loss": loss_dict["l1"].item(),
-                        "step/lr": scheduler.get_last_lr()[0],
+                        "step/lr": optimizer.param_groups[0]["lr"],
                         "global_step": global_step,
-                    })
+                    }
+                    if "jepa" in loss_dict:
+                        log_dict["step/jepa_loss"] = loss_dict["jepa"].item()
+                    wandb.log(log_dict)
 
             for k, v in loss_dict.items():
                 epoch_losses[k] = epoch_losses.get(k, 0.0) + v.item()

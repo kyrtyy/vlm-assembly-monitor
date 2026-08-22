@@ -23,26 +23,24 @@ from PIL import Image, ImageDraw, ImageFont
 import torchvision.transforms as transforms
 
 
-# Assembly state taxonomy (matches StateClassifier num_states=6)
+# Teleoperation state taxonomy (robotic manipulation)
 STATE_LABELS = [
-    "not_started",
-    "in_progress_early",
-    "in_progress_mid",
-    "in_progress_late",
+    "approaching",
+    "grasping",
+    "manipulating",
+    "placing",
     "completed",
     "error",
 ]
 
-# Pool of synthetic assembly instructions
+# Pool of robotic teleoperation instructions
 INSTRUCTIONS = [
-    "Attach the wooden table leg to the central base constraint",
-    "Insert the metal bolt through the side panel connector",
-    "Align the shelf bracket with the left wall mounting point",
-    "Secure the back panel using the four corner fasteners",
-    "Connect the drawer rail to the lower cabinet frame",
-    "Place the top surface onto the assembled leg assembly",
-    "Tighten all visible screws using the provided hex key",
-    "Slide the door panel into the upper and lower tracks",
+    "Pick up the red block and place it in the blue bowl",
+    "Grasp the screwdriver and insert it into the slot",
+    "Wipe the table in a circular motion",
+    "Open the microwave door using the handle",
+    "Align the peg with the insertion hole",
+    "Slide the drawer open and extract the tool",
 ]
 
 # Synthetic component colours (simulates furniture parts)
