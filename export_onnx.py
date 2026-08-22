@@ -68,15 +68,16 @@ def load_model(args, device) -> VLMAssemblyMonitor:
         T_max=args.T,
         freeze_vision_backbone=True,
         freeze_bert=True,
-    ).to(device)
+    )
 
     if Path(args.checkpoint).exists():
-        ckpt = torch.load(args.checkpoint, map_location=device)
+        ckpt = torch.load(args.checkpoint, map_location="cpu")
         model.load_state_dict(ckpt["model"])
         print(f"Loaded checkpoint: {args.checkpoint}")
     else:
         print("No checkpoint found — exporting with random weights for structure validation.")
 
+    model = model.to(device)
     model.eval()
     return model
 
@@ -84,10 +85,10 @@ def load_model(args, device) -> VLMAssemblyMonitor:
 def get_dummy_inputs(args, device):
     """Generate representative inputs for export and calibration."""
     clip = torch.randn(
-        args.batch_size, args.T, 3, args.img_size, args.img_size, device=device
-    )
-    input_ids = torch.randint(0, 30522, (args.batch_size, 64), device=device)
-    attn_mask = torch.ones(args.batch_size, 64, dtype=torch.long, device=device)
+        args.batch_size, args.T, 3, args.img_size, args.img_size
+    ).to(device)
+    input_ids = torch.randint(0, 30522, (args.batch_size, 64)).to(device)
+    attn_mask = torch.ones(args.batch_size, 64, dtype=torch.long).to(device)
     return clip, input_ids, attn_mask
 
 
@@ -98,6 +99,13 @@ def get_dummy_inputs(args, device):
 def benchmark_pytorch(model, args, device) -> dict:
     print("\n[1/3] Benchmarking FP32 PyTorch baseline...")
     clip, input_ids, attn_mask = get_dummy_inputs(args, device)
+    
+    # Strictly enforce device placement
+    clip = clip.to(device)
+    input_ids = input_ids.to(device)
+    attn_mask = attn_mask.to(device)
+    model = model.to(device)
+
 
     # Memory footprint (model parameters only — activation memory is input-dependent)
     param_bytes = sum(p.numel() * p.element_size() for p in model.parameters())
