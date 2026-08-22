@@ -82,45 +82,62 @@ def main():
     # 2. Get Input Data
     print("Preparing input data...")
     if args.synthetic:
-        dataset = SyntheticAssemblyDataset(num_clips=1, T=args.T, img_size=(args.img_size, args.img_size))
+        # Generate a longer synthetic clip, e.g., 50 frames
+        dataset = SyntheticAssemblyDataset(num_clips=1, T=50, img_size=(args.img_size, args.img_size))
         item = dataset[0]
-        clip = item["clip"].unsqueeze(0).to(device)
+        full_video_tensor = item["clip"] # (50, 3, H, W)
         instruction = item["instruction"]
     else:
         if not args.video:
             print("Error: Must specify --video or --synthetic")
             return
-        clip = load_video_frames(args.video, args.T, args.img_size).unsqueeze(0).to(device)
+        # Load all frames up to 300 for real videos
+        full_video_tensor = load_video_frames(args.video, max_frames=300, img_size=args.img_size)
         instruction = args.instruction
 
     print(f"Instruction: '{instruction}'")
+    total_frames = full_video_tensor.shape[0]
+    print(f"Total frames to process: {total_frames}")
     
     # Tokenize instruction
     input_ids, attn_mask = model.encode_instruction([instruction], device)
 
-    # 3. Inference
-    print("Running model inference...")
-    with torch.no_grad():
-        preds = model(clip, input_ids, attn_mask)
-        
-    state_logits = preds["state_logits"][0]
-    boxes = preds["boxes"][0]        # (T, max_objects, 4)
-    objectness = preds["objectness"][0] # (T, max_objects)
-    
-    predicted_state_idx = state_logits.argmax().item()
-    predicted_state_label = STATE_LABELS[predicted_state_idx]
-    
-    # 4. Visualization
-    print("Generating visualised video...")
-    clip_cpu = clip[0].cpu() # (T, 3, H, W)
-    boxes_cpu = boxes.cpu().numpy()
-    obj_cpu = objectness.sigmoid().cpu().numpy()
+    # 3. Sliding Window Inference & Visualization
+    print("Running sliding window inference & generating video...")
     
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(args.output, fourcc, 5.0, (args.img_size, args.img_size))
+    out = cv2.VideoWriter(args.output, fourcc, 10.0, (args.img_size, args.img_size)) # 10 FPS for smoother video
     
-    for t in range(args.T):
-        frame = denormalize(clip_cpu[t])
+    for t in range(total_frames):
+        # Create a window of size args.T ending at frame t
+        start_idx = max(0, t - args.T + 1)
+        window = full_video_tensor[start_idx : t + 1] # shape (W, 3, H, W) where W <= T
+        
+        # Pad if the window is smaller than T
+        if window.shape[0] < args.T:
+            pad_size = args.T - window.shape[0]
+            # Pad by repeating the first frame
+            pad_tensor = window[0].unsqueeze(0).repeat(pad_size, 1, 1, 1)
+            window = torch.cat([pad_tensor, window], dim=0)
+            
+        clip_input = window.unsqueeze(0).to(device) # (1, T, 3, H, W)
+        
+        with torch.no_grad():
+            preds = model(clip_input, input_ids, attn_mask)
+            
+        # We only care about the prediction for the CURRENT frame (the last frame in the window)
+        state_logits = preds["state_logits"][0]
+        current_boxes = preds["boxes"][0, -1]        # (max_objects, 4)
+        current_objectness = preds["objectness"][0, -1] # (max_objects,)
+        
+        predicted_state_idx = state_logits.argmax().item()
+        predicted_state_label = STATE_LABELS[predicted_state_idx]
+        
+        # Visualize
+        frame_cpu = full_video_tensor[t].cpu()
+        frame = denormalize(frame_cpu)
+        boxes_cpu = current_boxes.cpu().numpy()
+        obj_cpu = current_objectness.sigmoid().cpu().numpy()
         
         # Draw State & Instruction
         cv2.putText(frame, f"State: {predicted_state_label}", (10, 20), 
@@ -129,17 +146,16 @@ def main():
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)
         
         # Draw Boxes
-        for k in range(boxes_cpu.shape[1]):
-            prob = obj_cpu[t, k]
+        for k in range(boxes_cpu.shape[0]):
+            prob = obj_cpu[k]
             if prob > 0.5: # Objectness threshold
-                cx, cy, w, h = boxes_cpu[t, k]
-                # Denormalize coordinates
+                cx, cy, w, h = boxes_cpu[k]
                 x1 = int((cx - w/2) * args.img_size)
                 y1 = int((cy - h/2) * args.img_size)
                 x2 = int((cx + w/2) * args.img_size)
                 y2 = int((cy + h/2) * args.img_size)
                 
-                color = (0, int(255*prob), 255) # Yellow-ish
+                color = (0, int(255*prob), 255)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 cv2.putText(frame, f"{prob:.2f}", (x1, y1-5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
