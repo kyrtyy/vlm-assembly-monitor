@@ -539,16 +539,17 @@ def train(args):
 
     if is_main_process():
         print(f"\nTraining complete. Best val loss: {best_val_loss:.4f}")
-    if not args.no_wandb:
-        import wandb
-        wandb.finish()
-
-    # Synchronize all processes before destroying the process group so that
-    # rank 1 doesn't exit while rank 0 is still uploading artifacts to WandB.
+    # Synchronize all processes before destroying the process group
     if distributed:
         dist.barrier()
-
+        
     cleanup_distributed()
+
+    # Finish wandb only on main process AFTER distributed cleanup
+    # so rank 0 can upload artifacts for a long time without crashing other ranks
+    if not args.no_wandb and is_main_process():
+        import wandb
+        wandb.finish()
 
 
 if __name__ == "__main__":
