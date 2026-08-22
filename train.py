@@ -246,6 +246,7 @@ def evaluate(model, loader, criterion, device, amp_dtype) -> dict[str, float]:
     model.eval()
     total_losses = {}
     total_correct, total_samples = 0, 0
+    n = 0
 
     # Unwrap DDP model for encode_instruction
     raw_model = model.module if isinstance(model, DDP) else model
@@ -271,12 +272,12 @@ def evaluate(model, loader, criterion, device, amp_dtype) -> dict[str, float]:
             total_losses[k] = total_losses.get(k, 0.0) + v.item()
 
         # State accuracy
-        pred_states = preds["state_logits"].argmax(dim=1)
+        pred_states = preds["state_logits"].argmax(dim=-1)
         total_correct  += (pred_states == state_labels).sum().item()
         total_samples  += state_labels.size(0)
+        n += 1
 
-    n = len(loader)
-    metrics = {k: v / n for k, v in total_losses.items()}
+    metrics = {k: v / max(1, n) for k, v in total_losses.items()}
     metrics["state_accuracy"] = total_correct / max(total_samples, 1)
     return metrics
 
@@ -324,7 +325,10 @@ def train(args):
         print("Building dataloaders...")
     train_loader, val_loader, train_sampler = build_dataloaders(args)
     if is_main_process():
-        print(f"  Train: {len(train_loader.dataset)} clips | Val: {len(val_loader.dataset)} clips")
+        if not args.bridge:
+            print(f"  Train: {len(train_loader.dataset)} clips | Val: {len(val_loader.dataset)} clips")
+        else:
+            print(f"  Train: Streaming Iterable | Val: Streaming Iterable")
         print(f"  Effective batch size: {args.batch_size} × {args.grad_accum} × {world_size} = "
               f"{args.batch_size * args.grad_accum * world_size}")
 
@@ -389,7 +393,12 @@ def train(args):
         weight_decay=args.weight_decay,
     )
 
-    total_steps = args.epochs * len(train_loader) // args.grad_accum
+    train_loader_len = 1000 if args.bridge else len(train_loader)
+    total_steps = args.epochs * train_loader_len // args.grad_accum
+    
+    if is_main_process():
+        print(f"Total training steps: {total_steps}")
+    
     scheduler = get_cosine_schedule_with_warmup(optimizer, args.warmup_steps, total_steps)
     criterion = AssemblyLoss(num_states=args.num_states).to(device)
 
@@ -495,7 +504,7 @@ def train(args):
         val_metrics = evaluate(model, val_loader, criterion, device, amp_dtype)
         val_loss = val_metrics["total"]
 
-        n_batches = len(train_loader)
+        n_batches = train_loader_len
         train_summary = {f"train/{k}": v / n_batches for k, v in epoch_losses.items()}
         val_summary   = {f"val/{k}":   v for k, v in val_metrics.items()}
         elapsed = time.time() - t0
