@@ -38,7 +38,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 from models.vlm import VLMAssemblyMonitor
 from utils.losses import AssemblyLoss
-from data.synthetic import SyntheticAssemblyDataset, collate_fn
+from data.bridge_v2 import BridgeV2TeleopDataset, collate_fn
 
 
 # ── Distributed helpers ──────────────────────────────────────────────────────
@@ -83,6 +83,8 @@ def parse_args():
     # Data
     p.add_argument("--synthetic",   action="store_true",
                    help="Use synthetic dataset (no IKEA ASM download required)")
+    p.add_argument("--bridge",      action="store_true",
+                   help="Train on Bridge V2 real teleop data")
     p.add_argument("--data_root",   default="./ikea_asm",
                    help="Path to ikea_asm_dataset_public/")
     p.add_argument("--num_clips",   type=int, default=2000,
@@ -144,6 +146,14 @@ def build_dataloaders(args) -> tuple[DataLoader, DataLoader]:
             num_objects=args.num_objects,
             max_objects=args.max_objects,
         )
+    elif args.bridge:
+        from data.bridge_v2 import BridgeV2TeleopDataset
+        # IterableDatasets cannot use random_split or len()
+        train_ds = BridgeV2TeleopDataset(T=args.T, img_size=(args.img_size, args.img_size), split="train")
+        val_ds   = BridgeV2TeleopDataset(T=args.T, img_size=(args.img_size, args.img_size), split="val")
+        # Iterable datasets handle their own shuffling/streaming, so we disable PyTorch's distributed sampler
+        train_sampler = None
+        val_sampler = None
     else:
         from data.dataset import IKEAAsmDataset
         full_dataset = IKEAAsmDataset(
@@ -155,21 +165,24 @@ def build_dataloaders(args) -> tuple[DataLoader, DataLoader]:
             augment=True,
         )
 
-    val_size  = int(len(full_dataset) * args.val_split)
-    train_size = len(full_dataset) - val_size
-    train_ds, val_ds = random_split(
-        full_dataset, [train_size, val_size],
-        generator=torch.Generator().manual_seed(args.seed)
-    )
+    if not args.bridge:
+        val_size  = int(len(full_dataset) * args.val_split)
+        train_size = len(full_dataset) - val_size
+        train_ds, val_ds = random_split(
+            full_dataset, [train_size, val_size],
+            generator=torch.Generator().manual_seed(args.seed)
+        )
+        # ── Distributed sampler (shards data across GPUs) ─────────────────────
+        train_sampler = DistributedSampler(train_ds, shuffle=True) if is_distributed() else None
+        val_sampler   = DistributedSampler(val_ds, shuffle=False) if is_distributed() else None
 
-    # ── Distributed sampler (shards data across GPUs) ─────────────────────
-    train_sampler = DistributedSampler(train_ds, shuffle=True) if is_distributed() else None
-    val_sampler   = DistributedSampler(val_ds, shuffle=False) if is_distributed() else None
+    # For IterableDatasets, we cannot shuffle the DataLoader
+    is_iterable = args.bridge
 
     train_loader = DataLoader(
         train_ds,
         batch_size=args.batch_size,
-        shuffle=(train_sampler is None),  # shuffle only if not using DistributedSampler
+        shuffle=False if is_iterable else (train_sampler is None),
         sampler=train_sampler,
         num_workers=4,
         pin_memory=True,
@@ -185,6 +198,7 @@ def build_dataloaders(args) -> tuple[DataLoader, DataLoader]:
         num_workers=4,
         pin_memory=True,
         collate_fn=collate_fn,
+        drop_last=False,
         persistent_workers=True,
     )
     return train_loader, val_loader, train_sampler
